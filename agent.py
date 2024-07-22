@@ -1,12 +1,13 @@
 from typing import Any, Dict, List
 from langchain.agents import Tool, AgentExecutor, create_react_agent
-from langchain_community.tools import DuckDuckGoSearchRun, ShellTool
+from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from pydantic import BaseModel
 
 # from gemma import Gemma
 from gpt_4o_mini import Gpt4oMini
+from tools.shell_tool import ShellTool
 
 
 
