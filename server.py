@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 from agent import Agent
@@ -31,6 +32,13 @@ def read_item(question: Question):
     res = Agent.invoke(input=question.question)
     print(res)
     return Answer(answer=res.agent['output'])
+
+@app.post("/answer_streaming")    
+def answerStreaming(question: Question):
+    res = Agent.invokeStreaming(input=question.question)
+    # print(res)
+    return StreamingResponse(content=["実装中"], media_type="text/event-stream")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")

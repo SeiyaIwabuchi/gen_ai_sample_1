@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+import asyncio
+from typing import Any, AsyncIterable, Dict, List
 from langchain.agents import Tool, AgentExecutor, create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.prompts import ChatPromptTemplate
@@ -6,7 +7,9 @@ from langchain.callbacks.base import BaseCallbackHandler
 from pydantic import BaseModel
 
 # from gemma import Gemma
-from gpt_4o_mini import Gpt4oMini
+from gpt_4o_mini import Gpt4oMini as ModelClass
+# from tools.shell_tool import ShellTool
+from tools.create_file import FileCreationTool
 from tools.shell_tool import ShellTool
 
 
@@ -29,12 +32,13 @@ class CustomHandler(BaseCallbackHandler):
 class Agent:
     search = DuckDuckGoSearchRun()
     tools = [
-        ShellTool(working_directory="/workspaces/play_gemma/ai_work"),
+        ShellTool(),
         Tool(
             name="Search",
             func=search.run,
             description="useful for when you need to answer questions about current events"
         ),
+        FileCreationTool()
     ]
 
     template = """Answer the following questions as best you can. You have access to the following tools:
@@ -63,7 +67,7 @@ Thought: {agent_scratchpad}"""
     prompt = ChatPromptTemplate.from_template(template)
     
     # chain = prompt | AI.pipe
-    agent = create_react_agent(Gpt4oMini.llm, tools, prompt)
+    agent = create_react_agent(ModelClass.llm, tools, prompt)
 
     customHandler = CustomHandler()
 
@@ -74,3 +78,14 @@ Thought: {agent_scratchpad}"""
         cls.customHandler.steps = []
         res = cls.agent_executor.invoke({"input" : input})
         return AgentResponse(agent=res, steps=cls.customHandler.steps)
+    
+    @classmethod
+    async def invokeStreaming(cls, input: str):
+        cls.customHandler.steps = []
+
+        async for token in ModelClass.asyncIteratorCallbackHandler.aiter():
+            print(token)
+            yield AgentResponse(agent={"output": token}, steps=cls.customHandler.steps)
+    
+        cls.agent_executor.invoke({"input" : input})
+    

@@ -1,5 +1,6 @@
 import logging
 import platform
+import subprocess
 import warnings
 from typing import Any, List, Optional, Type, Union
 
@@ -35,18 +36,6 @@ class ShellInput(BaseModel):
         return values
 
 
-def _get_default_bash_process() -> Any:
-    """Get default bash process."""
-    try:
-        from langchain_experimental.llm_bash.bash import BashProcess
-    except ImportError:
-        raise ImportError(
-            "BashProcess has been moved to langchain experimental."
-            "To use this tool, install langchain-experimental "
-            "with `pip install langchain-experimental`."
-        )
-    return BashProcess(return_err_output=True, persistent=True)
-
 
 def _get_platform() -> str:
     """Get platform."""
@@ -59,13 +48,10 @@ def _get_platform() -> str:
 class ShellTool(BaseTool):
     """Tool to run shell commands."""
 
-    process: Any = Field(default_factory=_get_default_bash_process)
-    """Bash process to run commands."""
-
     name: str = "terminal"
     """Name of tool."""
 
-    description: str = f"Run shell commands on this {_get_platform()} machine."
+    description: str = f"Run shell commands on this {_get_platform()} machine. "
     """Description of tool."""
 
     args_schema: Type[BaseModel] = ShellInput
@@ -90,13 +76,34 @@ class ShellTool(BaseTool):
             if self.ask_human_input:
                 user_input = input("Proceed with command execution? (y/n): ").lower()
                 if user_input == "y":
-                    return self.process.run(commands)
+                    return self._runrun(commands)
                 else:
                     logger.info("Invalid input. User aborted command execution.")
                     return None  # type: ignore[return-value]
             else:
-                return self.process.run(commands)
+                return self._runrun(commands)
 
         except Exception as e:
             logger.error(f"Error during command execution: {e}")
             return None  # type: ignore[return-value]
+
+    
+    def _runrun(self, command: str) -> str:
+        """
+        Runs a command in a subprocess and returns
+        the output.
+
+        Args:
+            command: The command to run
+        """
+        try:
+            output = subprocess.run(
+                command,
+                shell=True,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            ).stdout.decode()
+        except subprocess.CalledProcessError as error:
+            return error.stdout.decode()
+        return output
