@@ -5,6 +5,8 @@ import uvicorn
 from agent import Agent
 from fastapi.middleware.cors import CORSMiddleware
 
+from chat import Chat
+
 app = FastAPI()
 
 # 許可するオリジンのリスト
@@ -27,11 +29,18 @@ class Question(BaseModel):
 class Answer(BaseModel):
     answer: str
 
-@app.post("/answer")    
+@app.post("/agent")    
 def read_item(question: Question):
     res = Agent.invoke(input=question.question)
     print(res)
     return Answer(answer=res.agent['output'])
+
+@app.post("/chat")    
+def read_item(question: Question):
+    res = Chat.invoke(input_text=question.question)
+    print(res)
+    return Answer(answer=res.agent['output'])
+
 
 @app.post("/answer_streaming")    
 def answerStreaming(question: Question):

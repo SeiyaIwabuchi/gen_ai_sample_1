@@ -1,12 +1,19 @@
 from langchain_openai import ChatOpenAI
 from config import openai_api_key
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
+
+class CustomHandler(BaseCallbackHandler):
+    def on_llm_end(self, result: LLMResult, **kwargs):
+        print(f"LLM Output: {result.generations[0][0].text}")
 
 class Gpt4oMini:
 
     llm = ChatOpenAI(
         model='gpt-4o-mini',
         temperature=0.7,
-        openai_api_key=openai_api_key)
+        openai_api_key=openai_api_key,
+        callbacks=[CustomHandler()])
 
 if __name__ == '__main__':
     print(Gpt4oMini.llm)
