@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from langchain import hub
 
 # from gemma import Gemma
-from gpt_4o_mini import Gpt4oMini as ModelClass
-# from gemma import Gemma as ModelClass
+# from gpt_4o_mini import Gpt4oMini as ModelClass
+from gemma import Gemma as ModelClass
 # from tools.shell_tool import ShellTool
 from tools.create_file import FileCreationTool
 from tools.shell_tool import ShellTool
@@ -30,10 +30,6 @@ class CustomHandler(BaseCallbackHandler):
 
     def on_tool_end(self, output, **kwargs):
         self.steps.append(f"Tool output: {output}")
-
-    def on_llm_start(self, serialized, prompts, **kwargs):
-        print("LLM is starting...")
-        print(f"{prompts=}")
 
     def on_llm_end(self, result, **kwargs):
         print(f"LLM Output: {result['choices'][0]['text']}")

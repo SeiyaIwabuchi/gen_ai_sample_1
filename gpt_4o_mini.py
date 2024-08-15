@@ -4,8 +4,14 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 class CustomHandler(BaseCallbackHandler):
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        print("LLM is starting...")
+        print(f"{prompts=}")
+        
     def on_llm_end(self, result: LLMResult, **kwargs):
         print(f"LLM Output: {result.generations[0][0].text}")
+
 
 class Gpt4oMini:
 

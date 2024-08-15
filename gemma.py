@@ -18,12 +18,13 @@ class GemmaPipeline:
         self.tokenizer = tokenizer
         self.task = "text-generation"  # task属性を追加
 
-    def __call__(self, prompt, max_new_tokens=9216):
+    def __call__(self, prompt, max_new_tokens=512):
         messages = [{"role": "user", "content": "".join(prompt)}]
 
         print(f"{messages=}")
 
-        input_ids = self.tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(self.model.device)
+        # input_ids = self.tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(self.model.device)
+        input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         
         outputs = self.model.generate(**input_ids, max_new_tokens=max_new_tokens)
         rawResponse: str = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -40,7 +41,7 @@ class GemmaPipeline:
 
 class Gemma:
 
-    model_id = "google/gemma-2-2b-it"
+    model_id = "google/gemma-2-2b"
     download_path = snapshot_download(repo_id=model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(download_path)
