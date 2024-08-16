@@ -1,3 +1,4 @@
+from typing import Any, Union
 from langchain_openai import ChatOpenAI
 from config import openai_api_key
 from langchain.callbacks.base import BaseCallbackHandler
@@ -11,6 +12,14 @@ class CustomHandler(BaseCallbackHandler):
         
     def on_llm_end(self, result: LLMResult, **kwargs):
         print(f"LLM Output: {result.generations[0][0].text}")
+
+    def on_llm_error(
+        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
+    ) -> Any:
+        """Run when LLM errors."""
+        print("### on_llm_error ###")
+        print(f"{error=}")
+        print("####################")
 
 
 class Gpt4oMini:

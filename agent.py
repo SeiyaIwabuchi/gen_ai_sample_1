@@ -1,19 +1,23 @@
 import asyncio
-from typing import Any, AsyncIterable, Dict, List
+import queue
+from typing import Any, AsyncIterable, Dict, List, Union
+from fastapi import WebSocket
 from langchain.agents import Tool, AgentExecutor, create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from pydantic import BaseModel
 from langchain import hub
+from langchain.schema import (
+    AgentFinish,
+)
 
 # from gemma import Gemma
-# from gpt_4o_mini import Gpt4oMini as ModelClass
-from gemma import Gemma as ModelClass
+from gpt_4o_mini import Gpt4oMini as ModelClass
+# from gemma import Gemma as ModelClass
 # from tools.shell_tool import ShellTool
 from tools.create_file import FileCreationTool
 from tools.shell_tool import ShellTool
-
 
 
 class AgentResponse(BaseModel):
@@ -27,21 +31,59 @@ class CustomHandler(BaseCallbackHandler):
 
     def on_agent_action(self, action, **kwargs):
         self.steps.append(f"Action: {action}")
+        print("### on_agent_action ###")
+        print(f"{action=}")
+        print("#######################\n")
+
+    def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
+        """Run on agent end."""
+        print("### on_agent_finish ###")
+        print(f"{finish=}")
+        print("#######################\n")
+
+    def on_tool_start(
+        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
+    ) -> Any:
+        """Run when tool starts running."""
+        print("### on_tool_start ###")
+        print(f"{input_str=}")
+        print("#####################\n")
 
     def on_tool_end(self, output, **kwargs):
         self.steps.append(f"Tool output: {output}")
+        print("### on_tool_end ###")
+        print(f"{output=}")
+        print("###################\n")
 
-    def on_llm_end(self, result, **kwargs):
-        print(f"LLM Output: {result['choices'][0]['text']}")
+    def on_tool_error(
+        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
+    ) -> Any:
+        """Run when tool errors."""
+        print("### on_tool_error ###")
+        print(f"{error=}")
+        print("#####################\n")
+
 
 class Agent:
-    tools = [
-        ShellTool(),
-        DuckDuckGoSearchRun(),
-        FileCreationTool()
-    ]
 
-    template = """Answer the following questions as best you can. You have access to the following tools:
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+        self.ws_recv_queue = queue.Queue()
+
+    def set_ws_connection(self, ws: WebSocket):
+        self.ws_con = ws
+
+    def invoke(self):
+
+        customHandler = CustomHandler()
+
+        tools = [
+            ShellTool(self.ws_con, self.ws_recv_queue, callbacks=[customHandler]),
+            DuckDuckGoSearchRun(callbacks=[customHandler]),
+            # FileCreationTool()
+        ]
+
+        template = """Answer the following questions as best you can. You have access to the following tools:
 
 {tools}
 
@@ -62,33 +104,17 @@ Begin!
 
 Question: {input}
 Thought: {agent_scratchpad}"""
-    
-    # prompt = ChatPromptTemplate.from_template(template)
-    # prompt = hub.pull("hwchase17/react")
-    prompt = PromptTemplate.from_template(template)
-    
-#     # chain = prompt | AI.pipe
-    agent = create_react_agent(ModelClass.llm, tools, prompt)
 
-    customHandler = CustomHandler()
+        # prompt = ChatPromptTemplate.from_template(template)
+        # prompt = hub.pull("hwchase17/react")
+        prompt = PromptTemplate.from_template(template)
 
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, callbacks=[customHandler])
+        # chain = prompt | AI.pipe
+        agent = create_react_agent(ModelClass.llm, tools, prompt)
 
-    # React agentの作成
+        agent_executor = AgentExecutor(
+            agent=agent, tools=tools, verbose=True, callbacks=[customHandler])
 
-    @classmethod
-    def invoke(cls, input: str):
-        cls.customHandler.steps = []
-        res = cls.agent_executor.invoke({"input" : input})
-        return AgentResponse(agent=res, steps=cls.customHandler.steps)
-    
-    @classmethod
-    async def invokeStreaming(cls, input: str):
-        cls.customHandler.steps = []
-
-        async for token in ModelClass.asyncIteratorCallbackHandler.aiter():
-            print(token)
-            yield AgentResponse(agent={"output": token}, steps=cls.customHandler.steps)
-    
-        cls.agent_executor.invoke({"input" : input})
-    
+        customHandler.steps = []
+        res = agent_executor.invoke({"input": self.message})
+        return AgentResponse(agent=res, steps=customHandler.steps)
