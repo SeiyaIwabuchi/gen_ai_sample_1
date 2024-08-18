@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import platform
 import queue
 import time
 import traceback
@@ -44,22 +43,15 @@ class ShellInput(BaseModel):
         return values
 
 
-
-def _get_platform() -> str:
-    """Get platform."""
-    system = platform.system()
-    if system == "Darwin":
-        return "MacOS"
-    return system
-
-
 class ShellTool(BaseTool):
     """Tool to run shell commands."""
+
+    platform: str = "unix"
 
     name: str = "terminal"
     """Name of tool."""
 
-    description: str = f"Run shell commands on this {_get_platform()} machine. "
+    description: str = f"Run shell commands on this {platform} machine. "
     """Description of tool."""
 
     args_schema: Type[BaseModel] = ShellInput
@@ -75,11 +67,14 @@ class ShellTool(BaseTool):
 
     ws_message_queue: queue.Queue = None
 
-    def __init__(self, ws: WebSocket, ws_message_queue: queue.Queue, callbacks: List[BaseCallbackHandler]):
+
+    def __init__(self, ws: WebSocket, ws_message_queue: queue.Queue, platform:str, callbacks: List[BaseCallbackHandler]):
         super().__init__()
         self.ws_con = ws
         self.ws_message_queue = ws_message_queue
         self.callbacks = callbacks
+        self.platform = platform
+        self.description = f"Run shell commands on this {self.platform} machine. "
 
     def _run(
         self,

@@ -1,9 +1,11 @@
 import asyncio
+import datetime
 import queue
 from typing import Any, AsyncIterable, Dict, List, Union
 from fastapi import WebSocket
 from langchain.agents import Tool, AgentExecutor, create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
+from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from pydantic import BaseModel
@@ -28,23 +30,28 @@ class AgentResponse(BaseModel):
 class CustomHandler(BaseCallbackHandler):
     def __init__(self):
         self.steps = []
+        self.started_at: datetime.datetime = None
 
     def on_agent_action(self, action, **kwargs):
         self.steps.append(f"Action: {action}")
+        self.started_at = datetime.datetime.now()
         print("### on_agent_action ###")
         print(f"{action=}")
+        print(f"{self.started_at=}")
         print("#######################\n")
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
         print("### on_agent_finish ###")
         print(f"{finish=}")
+        print(f"{(datetime.datetime.now() - self.started_at).seconds=}")
         print("#######################\n")
 
     def on_tool_start(
         self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
     ) -> Any:
         """Run when tool starts running."""
+        self.started_at = datetime.datetime.now()
         print("### on_tool_start ###")
         print(f"{input_str=}")
         print("#####################\n")
@@ -53,6 +60,7 @@ class CustomHandler(BaseCallbackHandler):
         self.steps.append(f"Tool output: {output}")
         print("### on_tool_end ###")
         print(f"{output=}")
+        print(f"{(datetime.datetime.now() - self.started_at).seconds=}")
         print("###################\n")
 
     def on_tool_error(
@@ -65,25 +73,11 @@ class CustomHandler(BaseCallbackHandler):
 
 
 class Agent:
-
-    def __init__(self, message: str) -> None:
-        self.message: str = message
+    def __init__(self, platform: str) -> None:
         self.ws_recv_queue = queue.Queue()
-
-    def set_ws_connection(self, ws: WebSocket):
-        self.ws_con = ws
-
-    def invoke(self):
-
-        customHandler = CustomHandler()
-
-        tools = [
-            ShellTool(self.ws_con, self.ws_recv_queue, callbacks=[customHandler]),
-            DuckDuckGoSearchRun(callbacks=[customHandler]),
-            # FileCreationTool()
-        ]
-
-        template = """Answer the following questions as best you can. You have access to the following tools:
+        self.memory = ConversationBufferMemory()
+        self.platform: str = platform
+        self.template = """Answer the following questions as best you can. You have access to the following tools:
 
 {tools}
 
@@ -107,14 +101,32 @@ Thought: {agent_scratchpad}"""
 
         # prompt = ChatPromptTemplate.from_template(template)
         # prompt = hub.pull("hwchase17/react")
-        prompt = PromptTemplate.from_template(template)
+        self.prompt = PromptTemplate.from_template(self.template)
+
+    def set_ws_connection(self, ws: WebSocket):
+        self.ws_con = ws
+
+    def invoke(self, message: str):
+
+        tools = [
+            ShellTool(self.ws_con, self.ws_recv_queue, platform=self.platform, callbacks=[CustomHandler()]),
+            DuckDuckGoSearchRun(callbacks=[CustomHandler()]),
+            # FileCreationTool()
+            Tool(
+                    name="conversation_memory",
+                    func=self.memory.load_memory_variables,
+                    description="Tools for capturing conversation history"
+                ),
+        ]
 
         # chain = prompt | AI.pipe
-        agent = create_react_agent(ModelClass.llm, tools, prompt)
+        agent = create_react_agent(ModelClass.llm, tools, self.prompt)
+
+        agent_handlers = CustomHandler()
 
         agent_executor = AgentExecutor(
-            agent=agent, tools=tools, verbose=True, callbacks=[customHandler])
+            agent=agent, tools=tools, verbose=True, callbacks=[agent_handlers], memory=self.memory)
 
-        customHandler.steps = []
-        res = agent_executor.invoke({"input": self.message})
-        return AgentResponse(agent=res, steps=customHandler.steps)
+        agent_handlers.steps = []
+        res = agent_executor.invoke({"input": message})
+        return AgentResponse(agent=res, steps=agent_handlers.steps)

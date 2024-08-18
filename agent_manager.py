@@ -10,9 +10,9 @@ class AgentManager:
         self.agent_instance_pool: Dict[str, Agent] = {}
     
 
-    def create(self, message: str):
+    def create(self, platform: str):
         client_id = uuid.uuid4().hex
-        self.agent_instance_pool[client_id] = Agent(message)
+        self.agent_instance_pool[client_id] = Agent(platform)
 
         return client_id
     

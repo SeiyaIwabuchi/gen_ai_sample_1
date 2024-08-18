@@ -1,5 +1,9 @@
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import duckduckgo_search
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+import httpx
+import openai
 from pydantic import BaseModel
 import uvicorn
 from agent import AgentResponse
@@ -8,6 +12,7 @@ import traceback
 
 from agent_manager import AgentManager
 from chat import Chat
+from constans.errors import Errors
 
 
 app = FastAPI()
@@ -29,6 +34,7 @@ app.add_middleware(
 agentManager = AgentManager()
 
 class Question(BaseModel):
+    client_id: str
     message: str
 
 class Answer(BaseModel):
@@ -36,15 +42,18 @@ class Answer(BaseModel):
 
 # サバクラ対応
 
-@app.post("/agent")
-def post_agent(question: Question):
+@app.get("/agent")
+def post_agent(platform: str = "unix"):
     # res = Agent.invoke(input=question.question)
     # print(res)
     # return Answer(answer=res.agent['output'])
 
-    client_id = agentManager.create(question.message)
+    client_id = agentManager.create(platform)
     return { "client_id" : client_id }
 
+@app.get("/is_alive_thread/{client_id}")
+def is_alive_thread(client_id: str):
+    return {"result": client_id in agentManager.agent_instance_pool}
 
 async def close_loop(websocket: WebSocket, agentManager: AgentManager, client_id: str):
     while client_id in agentManager.agent_instance_pool:
@@ -71,16 +80,33 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 
 
-@app.get("/wait_for_agent_task/{client_id}")
-def wait_for_agent_task(client_id: str):
-    agent = agentManager.get_agent_instance(client_id)
+@app.post("/wait_for_agent_task")
+def wait_for_agent_task(question: Question):
+    agent = agentManager.get_agent_instance(question.client_id)
     try:
-        res: AgentResponse = agent.invoke()
+        res: AgentResponse = agent.invoke(question.message)
         return Answer(answer=res.agent['output'])
-    except:
-        return Answer(answer=traceback.format_exc())
+    except openai.APIConnectionError:
+        traceback.print_exc()
+        return JSONResponse({
+            "name": Errors.OpenaiAPIConnectionError.name,
+            "code": Errors.OpenaiAPIConnectionError.value
+            }, 504)
+    except httpx.ReadTimeout:
+        traceback.print_exc()
+        return JSONResponse({
+            "name": Errors.HttpxReadTimeout.name,
+            "code": Errors.HttpxReadTimeout.value
+            }, 504)
+    except duckduckgo_search.exceptions.TimeoutException:
+        traceback.print_exc()
+        return JSONResponse({
+            "name": Errors.HttpxReadTimeout.name,
+            "code": Errors.HttpxReadTimeout.value
+            }, 504)
     finally:
-        agentManager.remove(client_id)
+        # agentManager.remove(question.client_id)
+        pass
 
 
 @app.post("/chat")
